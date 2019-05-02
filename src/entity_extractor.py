@@ -9,6 +9,10 @@ logging.basicConfig(level=logging.INFO)
 
 class EntityExtractor:
     def __init__(self, k):
+        '''
+        extract top k entities from content
+        :param k: top k
+        '''
         self.tokenizer = BertTokenizer.from_pretrained('./assets/chinese_L-12_H-768_A-12')
         self.model = BertModel.from_pretrained('./assets/bert-base-chinese')
         self.model.eval()
