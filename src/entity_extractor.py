@@ -3,12 +3,13 @@ import jieba.analyse
 import torch
 from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 import numpy as np
+from src.utils import load_data
 import logging
 logging.basicConfig(level=logging.INFO)
 
 
 class EntityExtractor:
-    def __init__(self, k):
+    def __init__(self, k=15):
         '''
         extract top k entities from content
         :param k: top k
@@ -24,7 +25,7 @@ class EntityExtractor:
         :param content:
         :return:
         '''
-        entity_list = jieba.analyse.extract_tags(content, topK=2, withWeight=False)
+        entity_list = jieba.analyse.extract_tags(content, topK=self.k, withWeight=False)
         return entity_list
 
     def get_bert_encoding(self, content):
@@ -45,6 +46,7 @@ class EntityExtractor:
         encoding = encoded_layers.numpy()[0]
         return encoding
 
+
     def get_entity_encoding(self, entity):
         '''
         对entity进行编码，返回的结果为其character-level encoding的平均
@@ -63,23 +65,56 @@ class EntityExtractor:
         :return: a dict like { entity1: encoding1(1, 768), entity2: encoding2(1, 768), ... }
         '''
         entity_list = self.extract_entity(content)
-        encodings = {}
+        encodings = []
         for entity in entity_list:
-            encodings[entity] = self.get_entity_encoding(entity)
+            item = dict()
+            item['entity'] = entity
+            item['encoding'] = self.get_entity_encoding(entity)
+            encodings.append(item)
         return encodings
 
+    def get_passages(self, items):
+        passages = []
+        for item in items:
+            passage = dict()
+            passage['title'] = self.get_bert_encoding(item['title'])
+            tokenized_content = self.tokenizer.tokenize(item['content'])
+            content_encoding = np.zeros((len(tokenized_content), 768))
+            for idx, token in enumerate(tokenized_content):
+                content_encoding[idx, :] = self.get_bert_encoding(token[0])
+            content_encoding = np.array(content_encoding)
+            print(content_encoding.shape)
+            passage['content'] = content_encoding
+            entity_encoding_list = []
+            for label in item['coreEntityEmotions']:
+                entity = label['entity']
+                entity_encoding_list.append(
+                    {
+                        "entity": entity,
+                        "encoding": self.get_entity_encoding(entity)
+                    }
+                )
+            passage['entity'] = entity_encoding_list
+            passage['candidate'] = self.get_entity_encodings(item['content'])
+            passages.append(passage)
+
+        return passages
+
+
+def make_data_set(size=500):
+    import json
+    data = load_data('./data/coreEntityEmotion_train.txt')
+    data = [data[i:i + size] for i in range(0, len(data), size)]
+    print(len(data))
+    extractor = EntityExtractor(k=5)
+    for idx, items in enumerate(data):
+        passages = extractor.get_passages(items)
+        print(passages)
+        json_passages = json.dumps(passages)
+        with open('./dataset/data.txt', 'w') as f:
+            f.write(json_passages)
+        break
 
 
 if __name__ == '__main__':
-    from src.utils import load_data
-    data = load_data('./data/coreEntityEmotion_example.txt')
-    print(data[0]['content'])
-    tokenizer = BertTokenizer.from_pretrained('./assets/chinese_L-12_H-768_A-12')
-    text = data[0]['content']
-    print(len(text))
-    extractor = EntityExtractor(2)
-    print(extractor.get_entity_encodings(text)['表带'].shape)
-
-    print(extractor.get_bert_encoding("我是标题").shape)
-
 

@@ -27,3 +27,4 @@ def top3entity(passage_encode, entity_candidate):
 def similarity(passage_encode, entity):
     simi = nn.functional.cosine_similarity(passage_encode, entity)
     return simi
+
