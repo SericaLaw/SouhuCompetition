@@ -29,11 +29,11 @@ class EntityExtractor:
         entity_list = jieba.analyse.extract_tags(content, topK=self.k, withWeight=False)
         return entity_list
 
-    def get_bert_encoding(self, content):
+    def character_level_encode(self, content):
         '''
         使用BERT对content进行character-level encoding
         :param content: a string of length n
-        :return: encodings of shape (n, 768)
+        :return: encodings of shape (768, n)
         '''
         tokenized_text = self.tokenizer.tokenize(content)
         # Convert token to vocabulary indices
@@ -45,19 +45,19 @@ class EntityExtractor:
             encoded_layers, _ = self.model(tokens_tensor, output_all_encoded_layers=False)
 
         encoding = encoded_layers.numpy()[0]
-        return encoding
+        return encoding.T
 
 
-    def get_entity_encoding(self, entity):
+    def sequence_level_encode(self, entity):
         '''
         对entity进行编码，返回的结果为其character-level encoding的平均
         :param entity: the string of entity
-        :return: an entity encoding of shape (1, 768)
+        :return: an entity encoding of shape (768, 1)
         '''
-        encoding = self.get_bert_encoding(entity)
+        encoding = self.character_level_encode(entity)
         n = len(encoding)
-        encoding = encoding.sum(axis=0) / n
-        return encoding.reshape(1, -1)
+        encoding = encoding.sum(axis=1) / n
+        return encoding.reshape(768, -1)
 
     def get_entity_encodings(self, content):
         '''
@@ -70,7 +70,7 @@ class EntityExtractor:
         for entity in entity_list:
             item = dict()
             item['entity'] = entity
-            item['encoding'] = self.get_entity_encoding(entity)
+            item['encoding'] = self.sequence_level_encode(entity)
             encodings.append(item)
         return encodings
 
@@ -78,23 +78,26 @@ class EntityExtractor:
         passages = []
         for item in items:
             passage = dict()
-            passage['title'] = self.get_bert_encoding(item['title'])
-            tokenized_content = self.tokenizer.tokenize(item['content'])
+            # passage['title'] = self.character_level_encode(item['title'])
+            tokenized_content = self.tokenizer.tokenize(item['title'] + item['content'])
             content_encoding = np.zeros((len(tokenized_content), 768))
+            passage['length'] = len(tokenized_content)
             for idx, token in enumerate(tokenized_content):
-                content_encoding[idx, :] = self.get_bert_encoding(token[0])
+                encoding = self.character_level_encode(token).T
+                content_encoding[idx, :] = encoding[0]
             content_encoding = np.array(content_encoding)
             print(content_encoding.shape)
-            passage['content'] = content_encoding
+            passage['passage'] = content_encoding
             entity_encoding_list = []
             for label in item['coreEntityEmotions']:
                 entity = label['entity']
                 entity_encoding_list.append(
                     {
                         "entity": entity,
-                        "encoding": self.get_entity_encoding(entity)
+                        "encoding": self.sequence_level_encode(entity)
                     }
                 )
+
             passage['entity'] = entity_encoding_list
             passage['candidate'] = self.get_entity_encodings(item['content'])
             passages.append(passage)
@@ -117,4 +120,12 @@ def make_data_set(size=500):
 
 
 if __name__ == '__main__':
+    extractor = EntityExtractor(2)
+    ce = extractor.character_level_encode("你好")
 
+    se = extractor.sequence_level_encode("你好")
+    print(ce.shape, se.shape)
+
+    data = load_data('./data/test.txt')
+    passages = extractor.get_passages(data)
+    print(passages)
