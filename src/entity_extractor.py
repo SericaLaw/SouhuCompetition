@@ -4,6 +4,7 @@ import torch
 from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 import numpy as np
 from src.utils import load_data
+import json
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -102,7 +103,6 @@ class EntityExtractor:
 
 
 def make_data_set(size=500):
-    import json
     data = load_data('./data/coreEntityEmotion_train.txt')
     data = [data[i:i + size] for i in range(0, len(data), size)]
     print(len(data))
