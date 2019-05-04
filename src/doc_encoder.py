@@ -23,6 +23,7 @@ class PassageEncoder(nn.Module):
         :param hidden: initial hidden state, torch tensor shape(output_size)
         :return: the output of lstm of shape(batch_size, length, output_size)
         '''
+        feature = feature.float()
         packed = nn.utils.rnn.pack_padded_sequence(feature, batch_first=True, lengths=input_length)
         lstm_out,hidden = self.bilstm(packed, hidden)
         out = nn.utils.rnn.pad_packed_sequence(lstm_out,batch_first=True)
@@ -33,9 +34,9 @@ def load_model(path, hidden_size=10, version="last"):
     model = PassageEncoder(hidden_size,hidden_size)
     if not os.path.exists(path):
         print("not exist")
-        return model
+        return model, 0
     else:
-        saveinfo = torch.load(SAVE_INFO_PATH)[version]
+        saveinfo = torch.load(path)[version]
         model.load_state_dict(torch.load(saveinfo)["model_state_dict"])
         cur_epoch = torch.load(saveinfo["epoch"])
         return model, cur_epoch
@@ -64,10 +65,10 @@ def loss_fn(encoded_passage, label, entity_candidate):
     print(encoded_passage[1,-1,:].shape)
     total_loss = torch.zeros(1,dtype=torch.float)
     for i_batch in range(encoded_passage.shape[0]):
-        for entity_name, entity_value in label[i_batch].items():
-            for candidate_name, candidate_value in entity_candidate[i_batch].items():
+        for entity in label[i_batch]:
+            for candidate in entity_candidate[i_batch]:
                 total_loss += nn.functional.triplet_margin_loss(
-                    anchor=encoded_passage[i_batch][-1,:], positive=entity_value, negative=candidate_value
+                    anchor=encoded_passage[i_batch][-1,:], positive=entity["encoding"], negative=candidate["encoding"]
                 )
     return total_loss
 
@@ -76,12 +77,13 @@ def getdata(dataloader):
     return dataloader
 
 
-def train(dataloader, model, num_epcoh=1, lr=0.1, save_path=None):
-    epoch = model[1]
-    model = model[0]
+def train(dataloader, model, num_epcoh=1, lr=0.1, save_path=None, cur_epoch=0):
+    model = model
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    print("start training")
     for step in range(num_epcoh):
+        print("epoch ",cur_epoch)
         # for idx, data in enumerate(dataloader):
         optimizer.zero_grad()
         data = getdata(dataloader)
@@ -92,14 +94,12 @@ def train(dataloader, model, num_epcoh=1, lr=0.1, save_path=None):
         loss = loss_fn(encoded_passage, label, candidate)
         loss.backward()
         optimizer.step()
-        epoch += 1
-        if not save_path:
-            torch.save({"model_state_dict":model.state_dict(),
-                        "epoch": epoch},save_path)
+        cur_epoch += 1
+        if save_path:
+            torch.save({"model_state_dict": model.state_dict(),"epoch": cur_epoch},save_path)
 
 
 def eval(dataloader, model):
-    model = model[0]
     model.eval()
     data = getdata(dataloader)
     passage, length, label, candidate = data["passage"], data["length"], data["entity"], data["candidate"]
@@ -108,7 +108,6 @@ def eval(dataloader, model):
     encoded_passage = encoded_passage.view(shape[0], shape[1], 2, -1)
     loss = loss_fn(encoded_passage, label, candidate)
     print(loss)
-
 
 
 def stackpassage(passages):
@@ -123,6 +122,8 @@ def stackpassage(passages):
         dataset[key] = []
         for p in passages:
             dataset[key].append(p[key])
+    print(len(dataset["passage"]), dataset["passage"][0].shape)
+    print(dataset["passage"][1].shape)
     dataset["passage"] = nn.utils.rnn.pad_sequence(dataset["passage"],batch_first=True)
     return dataset
 
@@ -136,21 +137,18 @@ def test():
         # passage["content"] = torch.randn(size=(2+i,nd))
         passage["passage"] = torch.randn(size=(2+i, nd))
         passage["length"] = 2+i
-        passage["entity"] = {"a":torch.randn(size=(nd,)),
-                             "b":torch.randn(size=(nd,)),
-                             "c": torch.randn(size=(nd,))}
-        passage["candidate"] = {"a":torch.randn(size=(nd,)),
-                                "e": torch.randn(size=(nd,)),
-                                "b": torch.randn(size=(nd,)),
-                                "f": torch.randn(size=(nd,))}
+        passage["entity"] = [{"entity":"a", "encoding": torch.randn(size=(nd,))}]
+        passage["candidate"] = [{"entity":"a", "encoding": torch.randn(size=(nd,))},
+                                {"entity": "c", "encoding": torch.randn(size=(nd,))}]
         passages.append(passage)
     # dataset = PassageDataset(passages)
     # dataloader = DataLoader(dataset,2, True,collate_fn=collate_wrapper, pin_memory=True)
+
     dataloader = stackpassage(passages)
-    model = PassageEncoder(nd, nd)
-    train(dataloader,model)
+    model,epoch = load_model(SAVE_INFO_PATH)
+    train(dataloader,model,cur_epoch=epoch)
 
 
 if __name__ == "__main__":
-    # test()
-    load_model(SAVE_INFO_PATH,10)
+    test()
+    # load_model(SAVE_INFO_PATH,10)

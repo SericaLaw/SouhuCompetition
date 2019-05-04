@@ -6,7 +6,6 @@ import torch.nn as nn
 
 def load_data(filePath):
     f = codecs.open(filePath, 'r', 'utf-8')
-
     data = []
     for line in f.readlines():
         if line.startswith(u'\ufeff'):
