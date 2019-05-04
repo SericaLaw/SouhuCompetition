@@ -15,8 +15,8 @@ class EntityExtractor:
         extract top k entities from content
         :param k: top k
         '''
-        self.tokenizer = BertTokenizer.from_pretrained('./assets/chinese_L-12_H-768_A-12')
-        self.model = BertModel.from_pretrained('./assets/bert-base-chinese')
+        self.tokenizer = BertTokenizer.from_pretrained('./src/assets/chinese_L-12_H-768_A-12')
+        self.model = BertModel.from_pretrained('./src/assets/bert-base-chinese')
         self.model.eval()
         self.k = k
 
@@ -70,7 +70,7 @@ class EntityExtractor:
         for entity in entity_list:
             item = dict()
             item['entity'] = entity
-            item['encoding'] = self.sequence_level_encode(entity)
+            item['encoding'] = torch.from_numpy(self.sequence_level_encode(entity))
             encodings.append(item)
         return encodings
 
@@ -87,14 +87,14 @@ class EntityExtractor:
                 content_encoding[idx, :] = encoding[0]
             content_encoding = np.array(content_encoding)
             print(content_encoding.shape)
-            passage['passage'] = content_encoding
+            passage['passage'] = torch.from_numpy(content_encoding)
             entity_encoding_list = []
             for label in item['coreEntityEmotions']:
                 entity = label['entity']
                 entity_encoding_list.append(
                     {
                         "entity": entity,
-                        "encoding": self.sequence_level_encode(entity)
+                        "encoding": torch.from_numpy(self.sequence_level_encode(entity))
                     }
                 )
 
@@ -106,7 +106,7 @@ class EntityExtractor:
 
 
 def make_data_set(size=500):
-    data = load_data('./data/coreEntityEmotion_train.txt')
+    data = load_data('./src/data/coreEntityEmotion_train.txt')
     data = [data[i:i + size] for i in range(0, len(data), size)]
     print(len(data))
     extractor = EntityExtractor(k=5)
@@ -114,18 +114,17 @@ def make_data_set(size=500):
         passages = extractor.get_passages(items)
         print(passages)
         json_passages = json.dumps(passages)
-        with open('./dataset/data.txt', 'w') as f:
+        with open('./src/dataset/data.txt', 'w') as f:
             f.write(json_passages)
         break
 
 
 if __name__ == '__main__':
     extractor = EntityExtractor(2)
-    ce = extractor.character_level_encode("你好")
-
-    se = extractor.sequence_level_encode("你好")
-    print(ce.shape, se.shape)
-
-    data = load_data('./data/test.txt')
+    # ce = extractor.character_level_encode("你好")
+    #
+    # se = extractor.sequence_level_encode("你好")
+    # print(ce.shape, se.shape)
+    data = load_data('./src/data/test.txt')
     passages = extractor.get_passages(data)
     print(passages)
