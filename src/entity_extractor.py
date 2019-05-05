@@ -1,6 +1,7 @@
 import jieba
 import jieba.analyse
 import torch
+import torch.nn as nn
 from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 import numpy as np
 from src.utils import load_data
@@ -40,13 +41,21 @@ class EntityExtractor:
         indexed_tokens = self.tokenizer.convert_tokens_to_ids(tokenized_text)
         # Convert inputs to PyTorch tensors
         tokens_tensor = torch.tensor([indexed_tokens])
-
+        maxlen = 512
+        divide_to_maxlen = []
+        num_group = len(indexed_tokens)//maxlen
+        for i in range(num_group):
+            divide_to_maxlen.append(tokens_tensor[:, i*maxlen:(i+1)*maxlen])
+        if num_group*512 < len(indexed_tokens):
+            divide_to_maxlen.append(tokens_tensor[:, num_group*512:])
+        encoding = []
         with torch.no_grad():
-            encoded_layers, _ = self.model(tokens_tensor, output_all_encoded_layers=False)
-
-        encoding = encoded_layers.numpy()[0]
-        return encoding.T
-
+            for x in divide_to_maxlen:
+                encoded_layers, _ = self.model(x, output_all_encoded_layers=False)
+                encoding.append(encoded_layers)
+        encoding = torch.cat(encoding,dim=1)
+        encoding = encoding.numpy()[0]
+        return encoding
 
     def sequence_level_encode(self, entity):
         '''
@@ -56,10 +65,11 @@ class EntityExtractor:
         '''
         encoding = self.character_level_encode(entity)
         n = len(encoding)
-        encoding = encoding.sum(axis=1) / n
-        return encoding.reshape(768, -1)
+        encoding = encoding.sum(axis=0) / n
+        return encoding
+        # return encoding.reshape(768, -1)
 
-    def get_entity_encodings(self, content):
+    def get_entity_encodings(self, content, device):
         '''
         从content中提取k个实体，对其进行编码
         :param content: a passage
@@ -70,39 +80,43 @@ class EntityExtractor:
         for entity in entity_list:
             item = dict()
             item['entity'] = entity
-            item['encoding'] = torch.from_numpy(self.sequence_level_encode(entity))
+            item['encoding'] = torch.from_numpy(self.sequence_level_encode(entity)).to(device=device)
             encodings.append(item)
         return encodings
 
-    def get_passages(self, items):
+    def get_passages(self, items, device):
         passages = []
         for item in items:
             passage = dict()
-            # passage['title'] = self.character_level_encode(item['title'])
-            tokenized_content = self.tokenizer.tokenize(item['title'] + item['content'])
-            content_encoding = np.zeros((len(tokenized_content), 768))
-            passage['length'] = len(tokenized_content)
-            for idx, token in enumerate(tokenized_content):
-                encoding = self.character_level_encode(token).T
-                content_encoding[idx, :] = encoding[0]
-            content_encoding = np.array(content_encoding)
-            print(content_encoding.shape)
-            passage['passage'] = torch.from_numpy(content_encoding)
+            p = item["title"] + item["content"]
+            encoded_content = self.character_level_encode(p)
+            # print(encoded_content.shape)
+            passage["passage"] = torch.from_numpy(encoded_content).to(device=device)
+            # tokenized_content = self.tokenizer.tokenize(item['title'] + item['content'])
+            # content_encoding = np.zeros((len(tokenized_content), 768))
+            passage['length'] = len(encoded_content)
+            # for idx, token in enumerate(tokenized_content):
+            #     print(type(token), token)
+            #     encoding = self.character_level_encode(token).T
+            #     content_encoding[idx, :] = encoding[0]
+            # content_encoding = np.array(content_encoding)
+            # print(content_encoding.shape)
+            # passage['passage'] = torch.from_numpy(content_encoding)
             entity_encoding_list = []
             for label in item['coreEntityEmotions']:
                 entity = label['entity']
                 entity_encoding_list.append(
                     {
                         "entity": entity,
-                        "encoding": torch.from_numpy(self.sequence_level_encode(entity))
+                        "encoding": torch.from_numpy(self.sequence_level_encode(entity)).to(device=device)
                     }
                 )
-
             passage['entity'] = entity_encoding_list
-            passage['candidate'] = self.get_entity_encodings(item['content'])
+            passage['candidate'] = self.get_entity_encodings(item['content'], device=device)
             passages.append(passage)
-
         return passages
+
+
 
 
 def make_data_set(size=500):
@@ -121,10 +135,6 @@ def make_data_set(size=500):
 
 if __name__ == '__main__':
     extractor = EntityExtractor(2)
-    # ce = extractor.character_level_encode("你好")
-    #
-    # se = extractor.sequence_level_encode("你好")
-    # print(ce.shape, se.shape)
     data = load_data('./src/data/test.txt')
     passages = extractor.get_passages(data)
     print(passages)

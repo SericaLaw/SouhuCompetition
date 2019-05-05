@@ -9,8 +9,8 @@ parser.add_argument("--model_path", default="./src/model")
 parser.add_argument("--num_epoch",default=10,type=int)
 parser.add_argument("--lr", default=1e-2)
 parser.add_argument("--eval", action="store_true")
-parser.add_argument("--num_candidate",default=10,type=int)
-parser.add_argument("--batch_size",default=10,type=int)
+parser.add_argument("--num_candidate",default=5,type=int)
+parser.add_argument("--batch_size",default=32,type=int)
 
 arg = parser.parse_args()
 MODEL_PATH = arg.model_path
@@ -22,18 +22,31 @@ DIMENSION = 768
 BATCH_SIZE = arg.batch_size
 
 def main():
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+    print("using device",device)
     extractor = EntityExtractor(NUM_CANDIDATE)
     data = load_data('./src/data/test.txt')
     data = [data[i:i + BATCH_SIZE] for i in range(0, len(data), BATCH_SIZE)]
     model, cur_epoch = load_model(MODEL_PATH, DIMENSION)
+    model = model.to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     print("start training")
     for idx, items in enumerate(data):
-        passages = extractor.get_passages(items)
+        if idx < cur_epoch:
+            continue
+        print("start batch {}: ".format(idx))
+        passages = extractor.get_passages(items, device=device)
         dataloader = stackpassage(passages)
-        train(dataloader,model,optimizer,save_path=MODEL_PATH, cur_epoch=cur_epoch)
+        train(dataloader,model,optimizer,device=device,save_path=MODEL_PATH, cur_epoch=cur_epoch)
         cur_epoch += 1
 
 
 if __name__ == "__main__":
     main()
+    # extractor = EntityExtractor(2)
+    # data = load_data('./src/data/test.txt')
+    # passages = extractor.get_passages(data)
+    # print(passages)
