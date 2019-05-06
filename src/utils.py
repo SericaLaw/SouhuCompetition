@@ -16,16 +16,23 @@ def load_data(filePath):
 
 
 def top3entity(passage_encode, entity_candidate):
+    '''
+
+    :param passage_encode: a tensor of shape (hidden_size)
+    :param entity_candidate: a list of  dict in type {"entity": "a", "encoding": torch.tensor}
+    :return:
+    '''
     similarity_list = []
     for entity in entity_candidate:
-        simi = similarity(passage_encode, entity)
-        similarity_list.append((simi,entity))
+        simi = similarity(passage_encode, entity["encoding"])
+        entity["similarity"] = simi
+        similarity_list.append(entity)
     sorted(similarity_list, key= lambda x: x[0])
     return similarity_list[0:3]
 
 
 def similarity(passage_encode, entity):
-    simi = nn.functional.cosine_similarity(passage_encode, entity)
+    simi = torch.dist(passage_encode,entity,p=2)
     return simi
 
 

@@ -1,15 +1,15 @@
 import argparse
 from src.entity_extractor import EntityExtractor
-from src.doc_encoder import stackpassage, PassageEncoder, train, load_model
+from src.doc_encoder import stackpassage, train, load_model, eval
 from src.utils import load_data
 import torch
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model_path", default="./src/model")
-parser.add_argument("--num_epoch",default=10,type=int)
+parser.add_argument("--num_epoch",default=16,type=int)
 parser.add_argument("--lr", default=1e-2)
 parser.add_argument("--eval", action="store_true")
-parser.add_argument("--num_candidate",default=5,type=int)
+parser.add_argument("--num_candidate",default=10,type=int)
 parser.add_argument("--batch_size",default=32,type=int)
 
 arg = parser.parse_args()
@@ -33,15 +33,26 @@ def main():
     model, cur_epoch = load_model(MODEL_PATH, DIMENSION)
     model = model.to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    print("start training")
-    for idx, items in enumerate(data):
-        if idx < cur_epoch:
-            continue
-        print("start batch {}: ".format(idx))
-        passages = extractor.get_passages(items, device=device)
-        dataloader = stackpassage(passages)
-        train(dataloader,model,optimizer,device=device,save_path=MODEL_PATH, cur_epoch=cur_epoch)
-        cur_epoch += 1
+    if EVAL_MODE:
+        for idx, items in enumerate(data):
+            if idx < cur_epoch:
+                continue
+            print("start batch {}: ".format(idx))
+            passages = extractor.get_passages(items, device=device)
+            dataloader = stackpassage(passages)
+            eval(dataloader,model)
+    else:
+        print("start training")
+        for idx, items in enumerate(data):
+            if idx < cur_epoch:
+                continue
+            print("start batch {}: ".format(idx))
+            passages = extractor.get_passages(items, device=device)
+            dataloader = stackpassage(passages)
+            train(dataloader,model,optimizer,device=device,save_path=MODEL_PATH, cur_epoch=cur_epoch)
+            cur_epoch += 1
+            if cur_epoch == 1030:
+                cur_epoch = 0
 
 
 if __name__ == "__main__":

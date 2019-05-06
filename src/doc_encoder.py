@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import src.utils as utils
 from torch.utils.data import Dataset, DataLoader
 import os
 SAVE_INFO_PATH = "saveInfo"
@@ -111,8 +112,18 @@ def eval(dataloader, model):
     encoded_passage, _ = model(passage, length)
     shape = encoded_passage.shape
     encoded_passage = encoded_passage.view(shape[0], shape[1], 2, -1)
-    loss = loss_fn(encoded_passage, label, candidate)
-    print(loss)
+    print(encoded_passage.shape)
+    # loss = loss_fn(encoded_passage, label, candidate)
+    f1_score = 0
+    batch_top3 = []
+    for i_batch in range(encoded_passage.shape[0]):
+        hidden = passage[i_batch][-1,:,:]
+        bi_passage = torch.sum(hidden, dim=0)
+        top3 = utils.top3entity(bi_passage,candidate)
+        batch_top3.append(top3)
+        print(top3[0][1]["entity"])
+
+    return f1_score
 
 
 def stackpassage(passages):
