@@ -20,15 +20,18 @@ def top3entity(passage_encode, entity_candidate):
 
     :param passage_encode: a tensor of shape (hidden_size)
     :param entity_candidate: a list of  dict in type {"entity": "a", "encoding": torch.tensor}
-    :return:
+    :return: similarity_list : a list of size 3 contain top3 entity of type dict with keys \
+                                entity, similarity, encoding
+            entity_list : a list of size 3 contain top3 entity of str
     '''
     similarity_list = []
     for entity in entity_candidate:
         simi = similarity(passage_encode, entity["encoding"])
         entity["similarity"] = simi
         similarity_list.append(entity)
-    sorted(similarity_list, key= lambda x: x[0])
-    return similarity_list[0:3]
+    sorted(similarity_list, key= lambda x: x["similarity"])
+    entity_list = [x["entity"] for x in similarity_list]
+    return similarity_list[0:3], entity_list[0:3]
 
 
 def similarity(passage_encode, entity):
@@ -45,8 +48,11 @@ def F1Score(truth_prediction_list):
 
     true_possitive = false_positive = false_negative = 0
     for d in truth_prediction_list:
-        truth = d['passage']
+        temp_truth = d['passage']
         y_hat = d['y_hat']
+        truth = []
+        for t in temp_truth:
+            truth.append(t['entity'])
         for t in truth:
             if t in y_hat:
                 true_possitive += 1
@@ -61,6 +67,6 @@ def F1Score(truth_prediction_list):
 
 
 if __name__ == '__main__':
-    test = [{'passage': ['a', 'b', 'c'], 'y_hat': ['a', 'b', 'c']},
-            {'passage': ['d', 'e', 'f'], 'y_hat': ['d', 'e']}]
+    test = [{'passage': [{'entity':'a'}, {'entity':'b'}, {'entity':'c'}], 'y_hat': ['a', 'b', 'c']},
+            {'passage': [{'entity':'d'}, {'entity':'e'}, {'entity':'f'}], 'y_hat': ['d', 'e']}]
     print(F1Score(test))

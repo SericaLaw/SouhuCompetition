@@ -10,7 +10,7 @@ parser.add_argument("--num_epoch",default=16,type=int)
 parser.add_argument("--lr", default=1e-2)
 parser.add_argument("--eval", action="store_true")
 parser.add_argument("--num_candidate",default=10,type=int)
-parser.add_argument("--batch_size",default=32,type=int)
+parser.add_argument("--batch_size",default=16,type=int)
 
 arg = parser.parse_args()
 MODEL_PATH = arg.model_path
@@ -30,17 +30,22 @@ def main():
     extractor = EntityExtractor(NUM_CANDIDATE)
     data = load_data('./src/data/test.txt')
     data = [data[i:i + BATCH_SIZE] for i in range(0, len(data), BATCH_SIZE)]
-    model, cur_epoch = load_model(MODEL_PATH, DIMENSION)
+    model, cur_epoch = load_model(MODEL_PATH, hidden_size=DIMENSION)
     model = model.to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     if EVAL_MODE:
+        print("eval start: ")
         for idx, items in enumerate(data):
-            if idx < cur_epoch:
+            if idx < 1030:
                 continue
-            print("start batch {}: ".format(idx))
+            if idx > 1040:
+                return
+            print("start eval batch {}: ".format(idx))
             passages = extractor.get_passages(items, device=device)
             dataloader = stackpassage(passages)
-            eval(dataloader,model)
+            f1_score = eval(dataloader,model)
+            print(f1_score)
+
     else:
         print("start training")
         for idx, items in enumerate(data):

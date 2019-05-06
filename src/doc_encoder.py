@@ -114,15 +114,17 @@ def eval(dataloader, model):
     encoded_passage = encoded_passage.view(shape[0], shape[1], 2, -1)
     print(encoded_passage.shape)
     # loss = loss_fn(encoded_passage, label, candidate)
-    f1_score = 0
     batch_top3 = []
     for i_batch in range(encoded_passage.shape[0]):
-        hidden = passage[i_batch][-1,:,:]
+        hidden = encoded_passage[i_batch,-1,:,:]
         bi_passage = torch.sum(hidden, dim=0)
-        top3 = utils.top3entity(bi_passage,candidate)
-        batch_top3.append(top3)
-        print(top3[0][1]["entity"])
-
+        _, top3 = utils.top3entity(bi_passage,candidate[i_batch])
+        batch_top3.append({"passage": label[i_batch],
+                           "y_hat":top3})
+        print(i_batch)
+        print("label: ", [x["entity"] for x in label[i_batch]])
+        print("top3: ", top3)
+    f1_score = utils.F1Score(batch_top3)
     return f1_score
 
 
